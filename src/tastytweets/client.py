@@ -15,8 +15,9 @@ except ImportError:
 
 from datetime import datetime
 
-from directory_queue.directory_queue import DirectoryQueue
 from directory_queue.generic_queue_item import GenericQueueItem
+
+from clearablequeue import ClearableDirectoryQueue
 
 
 BACKTWEETS_URL = u'http://backtweets.com/search.json'
@@ -30,12 +31,90 @@ STATUS_DATA = os.path.expanduser(
     '~/.tastytweets-statusdata.pkl'
 )
 
+CRON_OUTPUT_LOG_FILE = os.path.expanduser(
+    '~/.tastytweets-output.log'
+)
+
 QUEUE_DIR = os.path.expanduser(
     '~/.tastytweets-queue'
 )
 
+FOLLOW_DELAY = 6 # hours
+PUSH_DELAY = 5 # minutes
+
 
 class TastyTweeter(object):
+    """
+      
+      Takes a range of init params:
+      
+      - ``twitter_user`` is the username of the twitter account to update
+        required for ``follow`` and ``push`` not required for ``find``
+      
+      - ``twitter_pwd`` as above, for the twitter account password
+      
+      - ``backtweets_key`` required for all, this is the API key for backtweets.com
+      
+      - ``delicious_user`` defaults to the twitter user if not supplied, required if
+        the twitter user is not supplied
+      
+      - ``tags`` list of delicious tags to filter the urls by, defaults to ['follow']
+      
+      - ``status_data`` filesystem path to the (auto generated) status data file
+      
+      - ``queue_dir`` filesystem path to the (auto generated) queue directory which
+        persists stored up follow requests to be pushed on a regular basis
+      
+      If you only want to ``find`` twitter users, you can init with::
+      
+          >>> tt = TastyTweeter(
+          ...     backtweets_key = my_backtweets_key,
+          ...     delicious_user = my_delicious_user,
+          ... )
+      
+      If you want to automatically follow the found users, you'll need to pass in
+      the twitter account info::
+          
+          >>> tt = TastyTweeter(
+          ...     twitter_user = my_twitter_user,
+          ...     twitter_pwd = my_twitter_password,
+          ...     backtweets_key = my_backtweets_key,
+          ... )
+      
+      You can then basically ``find`` or ``follow``::
+          
+          >>> tt.find() # returns a list of usernames
+          [...]
+          >>> tt.follow() # returns a list of usernames queued up to be followed
+          [...]
+      
+      If you get a response from ``follow`` (that isn't ``[]``) then you'll have
+      a bunch of requests in a directory queue available at ``tt.queue``.  To
+      push a request up to twitter to follow that user::
+      
+          >>> tt.push()
+          'push: OK'
+      
+      This returns ``'push: OK'`` if the request was made successfully, or 
+      ``'push: Requeue'`` if there was a connection error, or ``'push: Error'`` if
+      the connection error has been repeated 3 times in a row or ``None`` if the
+      queue is empty.
+      
+      The ``TastyTweeter`` maintains a 'last tweet' ``status_id`` which records the
+      most recent tweet checked.  This is used to filter out the tweets already
+      picked up.  To reset the status_id::
+      
+          >>> tt.reset()
+      
+      This also resets the queue, clearing any pending items.  If you just want to
+      reset the queue or reset the status_id, use one of the specific methods,
+      ``reset_queue`` or ``reset_status_id``.
+      
+      From time to time you may want to remove the completed jobs from the queue,
+      using ``cleanup_queue``.
+      
+      
+    """
     status_ids = {}
     
     def _update_status_id(self):
@@ -115,6 +194,15 @@ class TastyTweeter(object):
         
     
     
+    def cleanup_queue(self):
+        self.queue.clear()
+    
+    def reset_queue(self):
+        shutil.rmtree(self.queue_dir)
+    
+    def reset_status_id(self):
+        self._init_status_id()
+    
     def reset(self):
         """
           
@@ -123,8 +211,8 @@ class TastyTweeter(object):
           
           
         """
-        self._init_status_id()
-        shutil.rmtree(self.queue_dir)
+        self.reset_status_id()
+        self.reset_queue()
     
     
     def find(self):
@@ -136,11 +224,11 @@ class TastyTweeter(object):
           
         """
         
-        # update the last-checked-tweet status id
-        self._update_status_id()
-        
         # get the tagged urls
         self.urls = self.get_sites(self.delicious_user, self.tags)
+        
+        # update the last-checked-tweet status id
+        self._update_status_id()
         
         # we build a list of dicovered users
         discovered_users = []
@@ -174,11 +262,11 @@ class TastyTweeter(object):
           
         """
         
-        # update the last-checked-tweet status id
-        self._update_status_id()
-        
         # get the tagged urls
         self.urls = self.get_sites(self.delicious_user, self.tags)
+        
+        # update the last-checked-tweet status id
+        self._update_status_id()
         
         # accessing twitter needs https auth, which we do with a simple header
         raw = "%s:%s" % (self.twitter_user, self.twitter_pwd)
@@ -186,8 +274,7 @@ class TastyTweeter(object):
         self.auth_header = {'AUTHORIZATION': 'Basic %s' % auth}
         
         # get existing users
-        self.existing_users = [] # self.get_existing_users(self.twitter_user, self.twitter_pwd)
-        print 'TODO: actually call get_existing_users'
+        self.existing_users = self.get_existing_users(self.twitter_user, self.twitter_pwd)
         
         # we build a list of new users
         following = []
@@ -236,8 +323,7 @@ class TastyTweeter(object):
             data = pickle.load(sock)
             sock.close()
             try:
-                print 'TODO: actually _send_request'
-                # self._send_request(data['request'])
+                self._send_request(data['request'])
                 self.queue.itemDone(queue_item)
                 return 'push: OK'
             except IOError:
@@ -267,7 +353,7 @@ class TastyTweeter(object):
         # init the queue
         if not os.path.exists(self.queue_dir):
             os.mkdir(self.queue_dir)
-        self.queue = DirectoryQueue(self.queue_dir, GenericQueueItem)
+        self.queue = ClearableDirectoryQueue(self.queue_dir, GenericQueueItem)
     
 
 
@@ -299,6 +385,20 @@ def parse_options():
         "-q", "--queue-directory-path", type="string", dest="queue_dir", default=QUEUE_DIR,
         help="full path to the queue where you want to store the follow request job items, defaults to ~/.tastytweets-queue"
     )
+    parser.add_option(
+        "-o", "--cron-output", type="string", dest="cron_log_file",  default=CRON_OUTPUT_LOG_FILE,
+        help="full path to the log file you want any automated cron jobs to write to, defaults to ~/.tastytweets-output.log"
+    )
+    parser.add_option(
+        "--follow-delay", type="int", dest="follow_delay", default=FOLLOW_DELAY,
+        help="no. of hours to wait between calling follow when automated"
+    )
+    parser.add_option(
+        "--push-delay", type="int", dest="push_delay", default=PUSH_DELAY,
+        help="no. of minutes to wait between calling push when follow requests are queued up"
+    )
+    
+    
     (options, args) = parser.parse_args()
     return options
 
@@ -323,7 +423,6 @@ def find():
 
 
 def follow():
-    print 'client.follow()'
     options = parse_options()
     if not options.backtweets_key:
         raise Exception('You must provide a http://backtweets.com/api key, i.e.: -k KEY')
@@ -340,16 +439,18 @@ def follow():
         status_data = options.status_data,
         queue_dir = options.queue_dir
     )
+    # clear the empty and done folders whilst we're here
+    tt.cleanup_queue()
+    # generate the new follow requests
     following = tt.follow()
     # if we picked up any users
-    if following:
+    if following: 
         # then start pushing them to twitter
         push()
     return following
 
 
 def push():
-    print 'client.push()'
     # try to push a request up to twitter
     options = parse_options()
     tt = TastyTweeter(queue_dir = options.queue_dir)
@@ -360,32 +461,45 @@ def push():
     push = os.path.join(absolute_path_to_bin_folder, 'tastytweets-push')
     # is there's a response but not a cron job
     if response is not None and not tab.find_command(push):
-        print 'setting push crontab'
-        # then push every 3 minutes - adds 20 follows per hour
-        cmd = '%s %s' % (
+        # then push every n minutes
+        cmd = '%s %s >> %s' % (
             push, 
             ' '.join(
                 sys.argv[1:]
-            )
+            ),
+            options.cron_log_file
         )
         cron = tab.new(command=cmd)
-        cron.minute().every(1)
-        print unicode(tab.render())
+        cron.minute().every(options.push_delay)
         tab.write()
     # else if there isn't a response (which means there's nothing in
     # the queue) and there is a cronjob running
     elif response is None and tab.find_command('tastytweets-push'):
-        print 'removing push crontab'
         tab.remove_all(push)
-        print unicode(tab.render())
         tab.write()
     return response
 
 
 def reset():
     options = parse_options()
+    # kill any crontabs
+    tab = crontab.CronTab()
+    absolute_path_to_bin_folder = os.path.abspath(os.path.dirname(sys.argv[0]))
+    push = os.path.join(absolute_path_to_bin_folder, 'tastytweets-push')
+    follow = os.path.join(absolute_path_to_bin_folder, 'tastytweets-follow')
+    tab.remove_all(push)
+    tab.remove_all(follow)
+    tab.write()
+    # reset the status_id and queue
     tt = TastyTweeter(queue_dir = options.queue_dir)
     return tt.reset()
+
+
+def reset_status_id():
+    options = parse_options()
+    # reset the status_id
+    tt = TastyTweeter(queue_dir = options.queue_dir)
+    return tt.reset_status_id()
 
 
 def automate():
@@ -407,15 +521,15 @@ def automate():
         tab.remove_all(follow_script)
         tab.remove_all(push_script)
         # follow every 6 hours
-        cmd = '%s %s' % (
+        cmd = '%s %s >> %s' % (
             follow_script, 
             ' '.join(
                 sys.argv[1:]
-            )
+            ),
+            options.cron_log_file
         )
         cron = tab.new(command=cmd)
-        cron.hour().every(6)
-        print unicode(tab.render())
+        cron.hour().every(options.follow_delay)
         tab.write()
     return follow()
 

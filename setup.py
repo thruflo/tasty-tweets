@@ -19,7 +19,7 @@ except ImportError:
 
 setup(
     name = 'tastytweets',
-    version = '0.1',
+    version = '0.2',
     description = "delicious twitter mashup; finds twitter users posting links to urls you've tagged so you can start following them",
     long_description = long_description,
     author = 'thruflo',
@@ -47,11 +47,12 @@ setup(
     test_suite = 'nose.collector',
     entry_points = {
         'console_scripts': [
-            'tastytweets-reset = tastytweets.client:reset',
             'tastytweets-find = tastytweets.client:find',
             'tastytweets-follow = tastytweets.client:follow',
             'tastytweets-push = tastytweets.client:push',
-            'tastytweets-automate = tastytweets.client:automate'
+            'tastytweets-automate = tastytweets.client:automate',
+            'tastytweets-reset-everything = tastytweets.client:reset',
+            'tastytweets-reset-status-id = tastytweets.client:reset_status_id'
         ]
     }
 )
