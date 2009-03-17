@@ -54,10 +54,10 @@ Prerequisites
 
 - you'll need a `Delicious <http://www.delicious.com>`_ account
 
-- you'll need a `Backtweets API <http://www.backtweet.com/api>`_ key
+- you'll need a `Backtweets <http://www.backtweet.com/api>`_ API key
 
 - if you want to automatically follow the users you'll need a
-`Twitter <http://www.twitter.com>`_ account
+  `Twitter <http://www.twitter.com>`_ account
 
 
 
@@ -78,7 +78,8 @@ interested in::
 ``tastytweets-find`` is the simplest way of using this package, especially if
 you don't like the way the automation that follows has been implemented.
 
-Find and automatically follow those users::
+Find and automatically follow those users (in real life on your twitter account, for real,
+don't do this unless you actually mean to!!)::
 
     $ ./path/to/bin/tastytweets-follow [... options ...]
 
@@ -94,12 +95,13 @@ To see all the options, run one of the scripts with the ``-h`` option::
 
 The default tag the script looks for in your delicious account is 'follow' but
 you can pass any tags using the ``-t`` option, e.g.: ``-t foo bar dolores``
-will only pick up urls tagged with ``foo`` and ``bar`` and ``dolores``.
+will only pick up urls tagged with ``foo`` and ``bar`` and ``dolores`` (n.b.: it's
+cumulative, like ``'foo' AND 'bar' AND 'dolores'``).
 
 For example, a fully optioned-up call might be [line wraps are marked ``\``]::
 
     $ ./path/to/bin/tastytweets-automate -u TWITTER_USERNAME -p TWITTER_PASSWORD \
-    -k BACKTWEETS_KEY -d DELICIOUS_USER -t follow specialist subject \
+    -k BACKTWEETS_KEY -d DELICIOUS_USER -t follow socialgraphing \
     --follow-delay 6 --push-delay 5
 
 There are two implementation details you should be aware of.  Firstly, Twitter
