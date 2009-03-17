@@ -25,7 +25,7 @@ BACKTWEETS_URL = u'http://backtweets.com/search.json'
 DELICIOUS_URL = u'http://feeds.delicious.com/v2/json/%s/%s?count=100'
 
 TWITTER_FOLLOWING_URL = u'https://twitter.com/friends/ids/%s.json'
-TWITTER_FOLLOW_URL = u'http://twitter.com/friendships/create/%s.json?follow=true'
+TWITTER_FOLLOW_URL = u'https://twitter.com/friendships/create/%s.json?follow=true'
 
 STATUS_DATA = os.path.expanduser(
     '~/.tastytweets-statusdata.pkl'
@@ -289,7 +289,7 @@ class TastyTweeter(object):
                     username = user['tweet_from_user'].lower()
                     self.existing_users.append(userid)
                     request = self._make_request(
-                        TWITTER_FOLLOW_URL % user, 
+                        TWITTER_FOLLOW_URL % username, 
                         'POST',
                         self.auth_header
                     )
@@ -326,7 +326,7 @@ class TastyTweeter(object):
                 self._send_request(data['request'])
                 self.queue.itemDone(queue_item)
                 return 'push: OK'
-            except IOError:
+            except IOError, e:
                 if data['errors'] < 3:
                     data['errors'] += 1
                     sock = open(queue_item.dataFileName(), 'w')
