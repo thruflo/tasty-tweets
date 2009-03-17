@@ -19,12 +19,12 @@ except ImportError:
 
 setup(
     name = 'tastytweets',
-    version = '0.2.1',
+    version = '0.2.2',
     description = "delicious twitter mashup; finds twitter users posting links to urls you've tagged so you can start following them",
     long_description = long_description,
     author = 'thruflo',
     author_email = 'thruflo@googlemail.com',
-    url = 'http://github.com/thruflo/tastytweets',
+    url = 'http://github.com/thruflo/tasty-tweets',
     classifiers = [
         'Development Status :: 3 - Alpha',
         'Environment :: Web Environment',
